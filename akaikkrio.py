@@ -531,6 +531,181 @@ def test_4element():
         f.write(s+"\n")
 
 
+
+
+
+# coding: utf-8
+
+# In[ ]:
+
+import numpy as np
+import matplotlib.pyplot as plt
+import glob
+import os
+import pickle
+#get_ipython().magic('matplotlib inline')
+from pymatgen import Element
+
+
+# In[ ]:
+
+def read_file(filename = "out.log"):
+    with open(filename) as f:
+        lines = f.readlines()
+    lines2 = []
+    for x in lines:
+        x = x.rstrip()
+        lines2.append(x)
+    del lines
+    lines = lines2
+    return lines
+
+def del_null(s):
+    s2 = []
+    for x in s:
+        if len(x)>0:
+            s2.append(x)
+    return s2
+
+class OutFirstDOS:
+    
+    def __init__(self,filename="out.log",target="lastDOS"):
+        self.lines = read_file(filename = filename)    
+        
+        self.ewidth = self.get_value(key="ewidth=",astype=float)
+        self.magtyp = self.get_value(key="magtyp=")
+        self.cut_atomiclevel()
+
+        if target=="firstDOS":
+            self.totaldos,_ = self.cut_dos(key = " total DOS",normalize=True)
+            self.derdos,_ = self.cut_dos(key = ' derivative of DOS',normalize=True)
+            self.der2dos,_ = self.cut_dos(key = ' 2nd derivative of DOS',normalize=True)
+            self.chargeneutral,_ = self.cut_dos(key = ' charge neutrality')        
+
+        self.ncmpx = self.get_value(key="ncmpx=",astype=int)
+
+        print(self.magtyp,self.ncmpx)
+        if target == "lastDOS":
+            if self.magtyp == "mag":
+                nspin = 2
+            else:
+                nspin = 1
+            istart = 0 
+            self.totaldos = []
+            self.componentdos = []
+            self.integrateddos = []
+            for ispin in range(nspin):
+
+                componentdos = []
+                for icmp in range(self.ncmpx):
+                    dos,istart = self.cut_dos(key = " DOS of component", start=istart)
+                    componentdos.append(dos)
+                componentdos = np.array(componentdos)
+                self.componentdos.append(componentdos)
+
+                dos,istart = self.cut_dos(key = " total DOS", start=istart)
+                self.totaldos.append(dos)
+
+                dos,istart = self.cut_dos(key = " integrated DOS", start=istart)
+                self.integrateddos.append(dos)
+
+
+    def get_value(self,key="ewidth=",astype=str):
+        lines = self.lines
+        for x in lines:
+            x = x.replace("=","= ")
+            s = x.split(" ")
+            if key in s:
+                s = del_null(s)
+                for i in range(len(s)):
+                    if s[i]==key:
+                        value = s[i+1]
+                        return astype(value)
+        return None
+
+    def cut_atomiclevel(self,key = '   nuclear charge=',key2 = '         nl      cnf         energy' ):
+        lines = self.lines
+        
+        flag = False
+        config = None
+        zlist = []
+        zconfig = []
+        i = 0
+        n = len(lines)
+        while i< n:
+            line = lines[i]
+            if line.startswith(key):
+                x = line.split("=")
+                #print(x)
+                zlist.append(float(x[1]))
+            if line.startswith(key2):
+                i += 2
+                config = []
+                for j in range(20):
+                    line = lines[i]
+
+                    if len(line)==0:
+                        zconfig.append(config)
+                        config = []
+                        break
+                    #print(line)
+                    x = line.split()
+                    config.append( [ x[0], float(x[1]), float(x[2])])                    
+                    i+=1
+            i = i+1
+        if config is not None:
+            if len(config)>0:
+                zconfig.append(config)
+        self.zlist , self.zconfig =  zlist,zconfig
+
+
+    def print_valencelevels(self,ewidth=-1.0):
+        zlist , zconfig = self.zlist, self.zconfig
+        for z, atomicconfig in zip(zlist,zconfig):
+            for config in atomicconfig:
+                if config[2]>ewidth:
+                    print(z,config)
+
+
+    def cut_dos(self,key = " total DOS", start=0, normalize=False):
+        istart = start
+        lines = self.lines
+        
+        started = False
+        done = False
+        totaldos= []
+        #for x in lines:
+        for iline in range(istart,len(lines)):
+            x = lines[iline]
+            if started and len(x)==0:
+                done = True
+            if started and x.startswith(" ***err"):
+                done = True
+            if started and x.startswith(" eb="):
+                done = True
+            if started and x.startswith("   itr="):
+                done = True
+            if started and x.startswith(" **itr="):
+                done = True
+ 
+            if started and not done:
+                totaldos.append( list(map(float,x.split())))
+            if started and done:
+                break
+            if x.startswith(key):
+                started = True
+                
+        totaldos = np.array(totaldos)
+        if normalize and totaldos.shape[0]>0:
+            for ic in range(1,totaldos.shape[1]):
+                vm = np.max(totaldos[:,ic])
+                totaldos[:,ic] = totaldos[:,ic]/vm 
+                
+        return np.array(totaldos), iline
+
+
+
+
 if __name__ == "__main__":
 
     #test_dispDB()
