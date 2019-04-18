@@ -572,17 +572,18 @@ class OutFirstDOS:
     def __init__(self,filename="out.log",target="lastDOS"):
         self.lines = read_file(filename = filename)    
         
-        self.ewidth = self.get_value(key="ewidth=",astype=float)
-        self.magtyp = self.get_value(key="magtyp=")
-        self.cut_atomiclevel()
+        self.ewidth,_ = self.get_value(key="ewidth=",astype=float)
+        self.magtyp,_ = self.get_value(key="magtyp=")
+        self.ncmpx,_ = self.get_value(key="ncmpx=",astype=int)
+        print("self.ncmpx",self.ncmpx)
 
+        self.cut_atomiclevel()
         if target=="firstDOS":
             self.totaldos,_ = self.cut_dos(key = " total DOS",normalize=True)
             self.derdos,_ = self.cut_dos(key = ' derivative of DOS',normalize=True)
             self.der2dos,_ = self.cut_dos(key = ' 2nd derivative of DOS',normalize=True)
             self.chargeneutral,_ = self.cut_dos(key = ' charge neutrality')        
 
-        self.ncmpx = self.get_value(key="ncmpx=",astype=int)
 
         print(self.magtyp,self.ncmpx)
         if target == "lastDOS":
@@ -591,6 +592,14 @@ class OutFirstDOS:
             else:
                 nspin = 1
             self.nspin = nspin
+
+            print("ncmpx",self.ncmpx)
+            istart=0
+            for icmp in range(self.ncmpx):
+                 z,istart =  self.get_value("anclr=",astype=float,start=istart)
+                 istart += 1 
+                 self.zlist.append(z)
+
             istart = 0 
             self.totaldos = []
             self.componentdos = []
@@ -611,9 +620,23 @@ class OutFirstDOS:
                 self.integrateddos.append(dos)
 
 
-    def get_value(self,key="ewidth=",astype=str):
+#    def get_value(self,key="ewidth=",astype=str):
+#        lines = self.lines
+#        for x in lines:
+#            x = x.replace("=","= ")
+#            s = x.split(" ")
+#            if key in s:
+#                s = del_null(s)
+#                for i in range(len(s)):
+#                    if s[i]==key:
+#                        value = s[i+1]
+#                        return astype(value)
+#        return None
+    def get_value(self,key="ewidth=",astype=str,start=0):
         lines = self.lines
-        for x in lines:
+        #for x in lines:
+        for iline in range(start,len(lines)):
+            x = lines[iline]
             x = x.replace("=","= ")
             s = x.split(" ")
             if key in s:
@@ -621,8 +644,9 @@ class OutFirstDOS:
                 for i in range(len(s)):
                     if s[i]==key:
                         value = s[i+1]
-                        return astype(value)
-        return None
+                        return astype(value),iline
+        return None,0
+
 
     def cut_atomiclevel(self,key = '   nuclear charge=',key2 = '         nl      cnf         energy' ):
         lines = self.lines
@@ -637,7 +661,6 @@ class OutFirstDOS:
             line = lines[i]
             if line.startswith(key):
                 x = line.split("=")
-                print("add zlist",x)
                 zlist.append(float(x[1]))
             if line.startswith(key2):
                 i += 2
@@ -727,8 +750,8 @@ class OutFirstDOS:
 """
 
 
-def finalcorelevel2dic(slist0):
-    levelsdic = {}
+def finalcorelevel2list(slist0):
+    levels = []
     for ss in slist0:
         n = len(ss)
         m = int((n-1)/24)
@@ -747,9 +770,10 @@ def finalcorelevel2dic(slist0):
                 op = "core"
             nl = x[2]
             ene = x[0]
-            levelsdic[nl] = [ene, op]
+            #levelsdic[nl] = [ene, op]
+            levels.append([nl,ene, op])
             
-    return levelsdic
+    return levels
         
 def type2_name_z(s):
     x = s.replace("("," ").replace(")"," ").replace("=","= ")
@@ -783,11 +807,13 @@ class OutputGo:
         print("zlist",self.zlist)
 
         self.totalenergy,start = self.get_value(key="energy=",astype=float)
-        self.finalcoredic = {}
+        self.finalcoreconf = []
+        self.finalcorez = []
         for i in range(self.ncmpx):
             z, finalcoreconfig, start = self.get_finalcorelevel(start)
             #print(z,finalcoreconfig)
-            self.finalcoredic[z] = finalcoreconfig
+            self.finalcoreconf.append(finalcoreconfig)
+            self.finalcorez.append(z)
             
     def get_finalcorelevel(self,start=0):
         lines = self.lines
@@ -827,7 +853,7 @@ class OutputGo:
                         corelevellines.append(x)
 
             #print(ispin,finalcorelevel2dic("".join(corelevellines)))
-            dic[ispin].append(finalcorelevel2dic(corelevellines))
+            dic[ispin].append(finalcorelevel2list(corelevellines))
         return z, dic, start
         
     def get_value(self,key="ewidth=",astype=str,start=0):
