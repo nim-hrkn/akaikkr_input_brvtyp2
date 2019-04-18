@@ -637,7 +637,7 @@ class OutFirstDOS:
             line = lines[i]
             if line.startswith(key):
                 x = line.split("=")
-                #print(x)
+                print("add zlist",x)
                 zlist.append(float(x[1]))
             if line.startswith(key2):
                 i += 2
@@ -774,7 +774,13 @@ class OutputGo:
 
         self.ncmpx,_= self.get_value(key="ncmpx=",astype=int)
 
-        print(self.magtyp,self.ncmpx)
+        istart = 0
+        self.zlist = []
+        for i in range(self.ncmpx):
+              x,istart = self.get_value(key="anclr=",astype=float,start=istart)
+              istart += 1
+              self.zlist.append(x)
+        print("zlist",self.zlist)
 
         self.totalenergy,start = self.get_value(key="energy=",astype=float)
         self.finalcoredic = {}
@@ -796,7 +802,7 @@ class OutputGo:
                         break
         name, z = type2_name_z(x)
         
-        dic = []
+        dic = [ [], [] ]
         key = "   core level  "
         for ispin  in range(self.nspin):
             if True:  # 下と見かけのlevelを合わせているだけ。
@@ -821,7 +827,7 @@ class OutputGo:
                         corelevellines.append(x)
 
             #print(ispin,finalcorelevel2dic("".join(corelevellines)))
-            dic.append(finalcorelevel2dic(corelevellines))
+            dic[ispin].append(finalcorelevel2dic(corelevellines))
         return z, dic, start
         
     def get_value(self,key="ewidth=",astype=str,start=0):
@@ -872,7 +878,8 @@ class OutputGo:
         if config is not None:
             if len(config)>0:
                 zconfig.append(config)
-        self.zlist , self.zconfig =  zlist,zconfig
+        #self.zlist , self.zconfig =  zlist,zconfig
+        self.zconfig =  zconfig
 
 
     def print_valencelevels(self,ewidth=-1.0):
