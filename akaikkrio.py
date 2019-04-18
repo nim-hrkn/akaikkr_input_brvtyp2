@@ -692,6 +692,12 @@ class OutFirstDOS:
                 done = True
             if started and x.startswith(" * itr="):
                 done = True
+            if started and x.startswith("***itr="):
+                done = True
+            if started and x.startswith("   ***msg"):
+                done = True
+
+
 
 
 
@@ -712,6 +718,169 @@ class OutFirstDOS:
                 
         return np.array(totaldos), iline
 
+
+"""
+(1x,3(2x,f15.7,' Ry(',a2,')',a1))
+
+1+3*(2+15+4+2+1+1) = 1*3*(25)
+
+"""
+
+
+def finalcorelevel2dic(slist0):
+    levelsdic = {}
+    for ss in slist0:
+        n = len(ss)
+        m = int((n-1)/24)
+        #print(m)
+        slist = []
+        for i in range(m):
+            slist.append(  ss[1+25*i:1+25*i+25])
+        #print("slist",slist)
+        for s in slist:
+            s = s.replace("("," ").replace(")"," ")
+            x = s.split()
+            #print("x",x)
+            if len(x)==4:
+                op = "valence"
+            else:
+                op = "core"
+            nl = x[2]
+            ene = x[0]
+            levelsdic[nl] = [ene, op]
+            
+    return levelsdic
+        
+def type2_name_z(s):
+    x = s.replace("("," ").replace(")"," ").replace("=","= ")
+    s = x.split()
+    name =s[2]
+    z = s[-2]
+    return name,z
+    
+class OutputGo:
+    
+    def __init__(self,filename="out.log"):
+        self.lines = read_file(filename = filename)    
+        
+        self.ewidth,_ = self.get_value(key="ewidth=",astype=float)
+        self.magtyp,_ = self.get_value(key="magtyp=")
+        if self.magtyp == "mag":
+            self.nspin = 2
+        else:
+            self.nspin = 1
+            
+        self.cut_atomiclevel()
+
+        self.ncmpx,_= self.get_value(key="ncmpx=",astype=int)
+
+        print(self.magtyp,self.ncmpx)
+
+        self.totalenergy,start = self.get_value(key="energy=",astype=float)
+        self.finalcoredic = {}
+        for i in range(self.ncmpx):
+            z, finalcoreconfig, start = self.get_finalcorelevel(start)
+            #print(z,finalcoreconfig)
+            self.finalcoredic[z] = finalcoreconfig
+            
+    def get_finalcorelevel(self,start=0):
+        lines = self.lines
+        key = "                             *** type"
+        for ispin  in range(self.nspin):
+            if True:  # 下と見かけのlevelを合わせているだけ。
+                found = False
+                for iline in range(start,len(self.lines)):
+                    x = lines[iline]
+                    if x.startswith(key):
+                        found = True
+                        break
+        name, z = type2_name_z(x)
+        
+        dic = []
+        key = "   core level  "
+        for ispin  in range(self.nspin):
+            if True:  # 下と見かけのlevelを合わせているだけ。
+                found = False
+                for iline in range(start,len(self.lines)):
+                    x = lines[iline]
+                    if x.startswith(key):
+                        found = True
+                        break
+            if found:
+                done = False
+                corelevellines = []
+                start = iline+1
+                for iline in range(start,len(self.lines)):
+                    x = lines[iline]
+                    if x.startswith(key) or len(x)==0:
+                        #print( x.startswith(key), len(x)==0)
+                        done = True
+                        start = iline
+                        break
+                    if not done:
+                        corelevellines.append(x)
+
+            #print(ispin,finalcorelevel2dic("".join(corelevellines)))
+            dic.append(finalcorelevel2dic(corelevellines))
+        return z, dic, start
+        
+    def get_value(self,key="ewidth=",astype=str,start=0):
+        lines = self.lines
+        #for x in lines:
+        for iline in range(start,len(lines)):
+            x = lines[iline]
+            x = x.replace("=","= ")
+            s = x.split(" ")
+            if key in s:
+                s = del_null(s)
+                for i in range(len(s)):
+                    if s[i]==key:
+                        value = s[i+1]
+                        return astype(value),iline
+        return None,0
+
+    def cut_atomiclevel(self,key = '   nuclear charge=',key2 = '         nl      cnf         energy' ):
+        lines = self.lines
+        
+        flag = False
+        config = None
+        zlist = []
+        zconfig = []
+        i = 0
+        n = len(lines)
+        while i< n:
+            line = lines[i]
+            if line.startswith(key):
+                x = line.split("=")
+                #print(x)
+                zlist.append(float(x[1]))
+            if line.startswith(key2):
+                i += 2
+                config = []
+                for j in range(20):
+                    line = lines[i]
+
+                    if len(line)==0:
+                        zconfig.append(config)
+                        config = []
+                        break
+                    #print(line)
+                    x = line.split()
+                    config.append( [ x[0], float(x[1]), float(x[2])])                    
+                    i+=1
+            i = i+1
+        if config is not None:
+            if len(config)>0:
+                zconfig.append(config)
+        self.zlist , self.zconfig =  zlist,zconfig
+
+
+    def print_valencelevels(self,ewidth=-1.0):
+        zlist , zconfig = self.zlist, self.zconfig
+        for z, atomicconfig in zip(zlist,zconfig):
+            for config in atomicconfig:
+                if config[2]>ewidth:
+                    print(z,config)
 
 
 
