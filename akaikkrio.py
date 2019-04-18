@@ -590,6 +590,7 @@ class OutFirstDOS:
                 nspin = 2
             else:
                 nspin = 1
+            self.nspin = nspin
             istart = 0 
             self.totaldos = []
             self.componentdos = []
@@ -687,11 +688,19 @@ class OutFirstDOS:
                 done = True
             if started and x.startswith(" **itr="):
                 done = True
+            if started and x.startswith("  *itr="):
+                done = True
+            if started and x.startswith(" * itr="):
+                done = True
+
+
+
+            if started and done:
+                break
  
             if started and not done:
                 totaldos.append( list(map(float,x.split())))
-            if started and done:
-                break
+
             if x.startswith(key):
                 started = True
                 
