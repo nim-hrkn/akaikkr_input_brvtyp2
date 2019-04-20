@@ -728,7 +728,15 @@ class OutFirstDOS:
                 break
  
             if started and not done:
-                totaldos.append( list(map(float,x.split())))
+                try:
+                    vm =  list(map(float,x.split()))
+                    totaldos.append( vm )
+                except:
+                    print("warning: conversion to float failed. drop the line.")
+                    print(x)
+                    vm = [x.split()[0],0,0,0]
+                    vm = list(map(float,vm)) 
+                    totaldos.append( vm )
 
             if x.startswith(key):
                 started = True
