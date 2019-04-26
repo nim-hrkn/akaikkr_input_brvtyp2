@@ -1,7 +1,10 @@
+import numpy as np
 from pymatgen import Element,Composition
 import pandas as pd
 
 def heakey2zlist(key):
+    if isinstance(key,int):
+        key = str(key)
     if isinstance(key,str):
         # key -> zlist
         n = int(len(key)/2)
@@ -14,6 +17,8 @@ def heakey2zlist(key):
         raise
 
 def heakey2elements(key):
+    if isinstance(key,int) or isinstance(key,np.int64):
+        key = str(key)
     if isinstance(key,str):
         # key -> zlist
         #n = int(len(key)/2)

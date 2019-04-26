@@ -144,7 +144,7 @@ class OutDisp:
             jobs.append(onejob)
         return jobs
 
-    def read(self,filename,key):
+    def read(self,filename,key,history=True):
         jobs = self.read_file(filename)
         # initialize
         diclist = []
@@ -220,10 +220,16 @@ class OutDisp:
                                 break
 
             # original I planed to use all of the lists, but they are too big.
-            dic["len_h_err"] = len(errlist)
-            dic["h_err"] = errlist[-1:]
-            dic["h_moment"] = h_momentlist[-1:]
-            dic["h_te"] = h_telist[-1:]
+            if history==True:
+                dic["len_h_err"] = len(errlist)
+                dic["h_err"] = errlist
+                dic["h_moment"] = h_momentlist
+                dic["h_te"] = h_telist
+            else:
+                dic["len_h_err"] = len(errlist)
+                dic["h_err"] = errlist[-1:]
+                dic["h_moment"] = h_momentlist[-1:]
+                dic["h_te"] = h_telist[-1:]
 
             diclist.append(dic)
 
@@ -238,6 +244,8 @@ class OutDisp:
                converged = False
 
         self.dic = {"key":key, "converged": converged, "property": diclist }
+
+        return self
 
 def test_jij_disp():
     # test code
