@@ -2,7 +2,7 @@ import numpy as np
 from pymatgen import Element,Composition
 import pandas as pd
 
-def heakey2zlist(key):
+def heakey2zlist(key,astype=str):
     if isinstance(key,int):
         key = str(key)
     if isinstance(key,str):
@@ -11,7 +11,7 @@ def heakey2zlist(key):
         zlist = []
         for i in range(n):
             zlist.append( key[2*i:2*i+2])
-        return zlist
+        return list(map(astype,zlist))
     else:
         print("input error",key)
         raise

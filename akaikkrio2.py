@@ -1,55 +1,26 @@
+
+# coding: utf-8
+
+# In[6]:
+
 import numpy as np
+import pickle
+
 import os
 import sys
 import copy
 import glob
-import progressbar 
-import fitequationofstate
 import matplotlib.pyplot as plt
 import pandas as pd
 
-class CompleteCheck:
-    def __init__(self):
-        pass
+from pymatgen import Element
 
-    def execute(self,dirs):
-        files = ["out_jij.log","out_disp.log", "out_equiv.log"]
-        notcompletes = []
-        for x in dirs:
-            if self.isIncomplete(x):
-                notcompletes.append(x)
-
-        print(len(notcompletes))
-        notcompletes2 = []
-        for x in notcompletes:
-            y = os.path.split(x)
-            notcompletes2.append(y[-1])
-
-        filename = "notcompleted"
-        with open(filename,"w") as f:
-            f.write("\n".join(notcompletes2))
-        print("filename:{} is made".format(filename))
-
-    def isIncomplete(self,dir_):
-        files = ["out_jij.log","out_disp.log", "out_equiv.log"]
-        notcompletes = []
-        x = dir_
-        for y in files:
-            z = os.path.join(x,y)
-            if not os.path.exists(z):
-                notcompletes.append(x)
-        notcompletes = set(notcompletes)
-        if len(notcompletes)==0:
-            return False
-        else:
-            return True
-
-
-
-class OutJij: 
-    def __init__(self):
+class OutputJ: 
+    def __init__(self,outputfile):
         self.dic = {}
-    def read(self,outputfile,key ):
+        self.read(outputfile)
+        
+    def read(self,outputfile ):
         """
           analyze outjij.out
         """
@@ -59,8 +30,6 @@ class OutJij:
         for output in outputlist:
                 if 'total energy' in output:
                         str1=output.split() ; te=float(str1[2])
-                if 'chr,spn' in output:
-                        str1=output.split() ; moment=float(str1[6])
                 elif 'spin moment' in output:
                         str1=output.split() ; moment_comp.append(float(str1[2]))
                 elif 'mean field approximation' in output:
@@ -75,8 +44,13 @@ class OutJij:
                 elif 'unit cell volume=' in output:
                         str1=output.split() ; vol = str1[3]
                         vol = float(vol.split('(a.u.)')[0])
+                elif "itr=" in output and "moment=" in output:
+                        s = output.replace("=","= ")
+                        x = s.split()[5]
+                        moment = float(x)
 
-        self.dic = {"totalenergy":te, "moment":moment,"moment_comp": moment_comp, "Tc": Tc, "alen":alen,"vol":vol ,"key":key }
+        self.dic = {"totalenergy":te, "moment":moment,"moment_comp": moment_comp, 
+                    "Tc": Tc, "alen":alen,"vol":vol  }
 
         return self.dic
 
@@ -107,8 +81,9 @@ class OutJij:
 
 class OutDisp:
 
-    def __init__(self):
+    def __init__(self,filename,key,history=False):
         self.dic = {}
+        self.read(filename,key,history)
 
     def short(self):
         sss = []
@@ -117,14 +92,6 @@ class OutDisp:
             s.extend(d["moment"]) 
             sss.append(" ".join(list(map(str,s))))
         return "\n".join(sss)
-
-#    def test_dirs():
-#        for id_,d in enumerate(dirs):
-#            key = os.path.split(d)[-1]
-#            p = d+'/out_jij.log'
-#            print(read_jij(p,key,id_))
-#            if id_>=3:
-#               break
 
     def read_file(self,filename):
         with open(filename) as f:
@@ -158,13 +125,7 @@ class OutDisp:
             for output in onejob:
                 if 'total energy' in output:
                         str1=output.split() ; te=str1[2]; dic["totalenergy"] = float(te)
-                elif 'chr,spn' in output:
-                        str1=output.split() ; 
-                        for i,x in enumerate(str1):
-                            if x =="chr,spn":
-                                moment = str1[i+2]
-                                dic["totalmoment"] = float(moment)
-                                break
+
                 elif "anclr=" in output:
                         str1=output.split() ;  anclr.append(str1[3]) ; conc.append(float(str1[5]))
                 elif 'spin moment' in output:
@@ -231,6 +192,8 @@ class OutDisp:
                 dic["h_moment"] = h_momentlist[-1:]
                 dic["h_te"] = h_telist[-1:]
 
+            dic["totalmoment"] = h_momentlist[-1]
+            
             diclist.append(dic)
 
         converged = True
@@ -247,313 +210,11 @@ class OutDisp:
 
         return self
 
-def test_jij_disp():
-    # test code
-    key = "24307274"
-    filename = "/home/kino/kino/work/fukushima_HEA/result/result_4elements/{}/out_jij.log".format(key)
-
-    disp = OutJij()
-    disp.read(filename,key)
-    print(disp)
-    #
-    #
-    filename = "/home/kino/kino/work/fukushima_HEA/result/result_4elements/{}/out_disp.log".format(key)
-
-    disp = OutDisp()
-    disp.read(filename,key)
-    print(disp.short())
-#test_jij_disp()
-
-class DispDB:
-    def __init__(self,collection):
-        self.collection = collection 
-    def insert_all(self,dirmask):
-        print("start insert_all",dirmask)
-        use_progressbar = True
-        collection = self.collection
-        dirs = glob.glob(dirmask)
-        nmax = len(dirs)
-        if use_progressbar:
-            p = progressbar.ProgressBar(0,nmax, widgets=[
-                    progressbar.CurrentTime(), ':',
-                        '(', progressbar.Counter(), ' of {}) '.format(nmax),
-                         progressbar.Bar(), ' ', progressbar.ETA(), ])
-        iadd = 0 
-        for i,d in enumerate(dirs):
-            if use_progressbar:
-                p.update(i+1)
-            key = os.path.split(d)[-1]
-            one = collection.find_one({"key":key}) 
-            if one is None:
-                incomplete = CompleteCheck().isIncomplete(d) 
-                if not incomplete:
-                    disp = OutDisp()
-                    disp.read(d+'/out_disp.log',key)
-                    dic = disp.dic 
-                    dic.update({"directory":d})
-                    collection.insert_one(dic)
-                    iadd +=1
-        print("inserted {} items".format(iadd))
-
-    def count(self):
-        post = self.collection.count_documents({})
-        print("n=",post)
-        return post
-
-    def show_all(self):
-        for x in self.collection.find({}):
-            print(x["key"])
-
-    def make_eqos_fig(self,key,prefix="",action=["save"]):
-        print("key",key)
-        collection = self.collection
-        prop = collection.find_one({"key":key})
-        x = []
-        y = []
-        for dic  in prop["property"]:
-            print( dic["alen"],len(dic["h_err"]), dic["h_err"][-1], dic["h_moment"][-1],dic["totalenergy"], dic["moment"],dic["valence_charge"] )
-            x.append( dic["alen"] )
-            y.append( dic["totalenergy"] )
-        plt.figure()
-        plt.plot(x,y,".")
-        plt.title(key)
-        savefile = os.path.join(os.path.join(prefix,str(key)),"aE.png")
-        if "save" in action:
-            print("savefile",savefile)
-            plt.savefig(savefile)
-        if "plot" in action:
-            plt.show()
-
-
-def test_dispDB():
-    from pymongo import MongoClient
-    client = MongoClient('mongodb://localhost:27017/')
-    db = client['HEA4']
-    collection = db['results']
-    #collection.drop()
-    #collection2 = db['eqos']
-
-    dispDB = DispDB(collection)
-    dispDB.insert_all("/home/kino/kino/work/fukushima_HEA/result/result_4elements/[0-9]*")
-    dispDB.count()
-    #dispDB.show_all()
-
-    print("done")
-
-def test_dispDB_short():
-    from pymongo import MongoClient
-    client = MongoClient('mongodb://localhost:27017/')
-    db = client['HEA4']
-    collection = db['results']
-    #collection.drop()
-    #collection2 = db['eqos']
-
-    dispDB = DispDB(collection)
-    dispDB.insert_all("/home/kino/kino/work/fukushima_HEA/result/result_4elements/[0-9]*")
-    dispDB.count()
-    #dispDB.show_all()
-
-    print("done")
-
-
-#test_dispDB()
-#sys.exit(0)
-
-            
-class EqosDB:
-    def __init__(self,collection,collection2):
-        self.collection = collection
-        self.collection2 = collection2
-
-    def make(self):
-        collection = self.collection
-        collection2 = self.collection2
-        n = collection.count({}) 
-        nmax = n
-        use_progressbar = True
-        if use_progressbar:
-            p = progressbar.ProgressBar(0,nmax, widgets=[
-                    progressbar.CurrentTime(), ':',
-                        '(', progressbar.Counter(), ' of {}) '.format(nmax),
-                         progressbar.Bar(), ' ', progressbar.ETA(), ])
- 
-        iadd = 0
-        for i,d in enumerate(collection.find()): 
-            if use_progressbar:
-                p.update(i+1)
-            key = d["key"]
-            conv = d["converged"]
-            one = collection2.find_one({"key":key}) 
-            if one is None:
-                #print("add {} of {}, key:{}".format(i,n,key))
-                data = []
-                for dic in d["property"]:
-                    data.append([ dic["alen"],len(dic["h_err"]), dic["h_err"][-1], dic["h_moment"][-1],dic["totalenergy"] ] ) 
-                tmp_path = "temporary"
-                if os.path.exists(tmp_path):
-                    #print("tmp_path",tmp_path)
-                    write_path = os.path.join(tmp_path,'xy')
-                    with open(write_path, 'w') as f:
-                        for d in data:
-                            f.write(" ".join(map(str,d))+"\n")
-                    try:
-                        dic = fitequationofstate.fit_Murnaghan_eq(tmp_path,write_path)
-                    except:
-                        continue
-                    dic.update({"key":key, "converged":conv})
-                    dic["argmin"] = int(dic["argmin"])
-                    collection2.insert_one(dic)
-                    iadd += 1
-            else:
-               #print("skip {}".format(key))
-               pass 
-        print("inserted {} items".format(iadd))
-
-    def show_all_rmse(self):
-        collection2 = self.collection2
-        keylist = []
-        rrmselist = []
-        iargminlist = []
-        for dic in collection2.find():
-            key = dic["key"]
-            yrange = dic["yrange"]
-            iargminlist.append( dic["argmin"] )
-            rrmselist.append( dic["RMSE"]/yrange )
-            keylist.append(key)
-            
-        if True:
-            plt.figure()
-            plt.xlabel("RMSE")
-            plt.ylabel("occurence")
-            plt.hist(rrmselist,range=(0,1),bins=100)
-            plt.show()
-
-            plt.figure()
-            plt.xlabel("argmin")
-            plt.ylabel("renormalized RMSE")
-            plt.plot(iargminlist,rrmselist,".")
-            plt.show()
- 
-def test_EqosDB():
-    from pymongo import MongoClient
-    client = MongoClient('mongodb://localhost:27017/')
-    db = client['HEA4']
-    collection = db['results']
-    #collection.drop()
-    collection2 = db['eqos']
-    #collection2.drop()
-
-    db2eqos = EqosDB(collection,collection2)
-    db2eqos.make()
-    #db2eqos.show_all_rmse()
-
-#test_EqosDB()
-#sys.exit(0)
-
-def test_eqos_figure():
-    from pymongo import MongoClient
-    client = MongoClient('mongodb://localhost:27017/')
-    db = client['HEA4']
-    collection = db['results']
-    #collection.drop()
-    collection2 = db['eqos']
-    #collection2.drop()
-
-    dispDB = DispDB(collection)
-    #db2eqos = EqosDB(collection,collection2)
- 
-    xlist = []
-    alllist = collection2.find({})
-    for x in alllist:
-        key = x["key"]
-        rrmse = x["RMSE"] / x["yrange"] 
-        #if rrmse > 0.2:
-        #     dispDB.make_eqos_fig(key,action=["plot"])
-        xlist.append([int(key),float(rrmse),float(x["RMSE"]),float(x["yrange"])])
-    xlist = np.array(xlist)
-    print(xlist.shape)
-    print(xlist)
-    if True:
-        hh,edge = np.histogram(xlist[:,1],bins=30)
-        print(hh)
-        print(edge)
-    plt.figure()
-    plt.hist(xlist[:,1],bins=30,range=(0,0.5))
-    plt.show()
-
-    alllist = collection2.find({})
-    for x in alllist:
-        key = x["key"]
-        rrmse = x["RMSE"] / x["yrange"] 
-        if rrmse > 0.1 and rrmse< 0.2  and x["converged"] :
-             print("rrmse",rrmse,"converged",x["converged"])
-             dispDB.make_eqos_fig(key,action=["plot"])
- 
-
-#test_eqos_figure()
-#sys.exit(0)
-def extract_shortresult(path1):
-
-    outdisp = OutDisp()
-    outjij = OutJij()
-    key = os.path.split(path1)[-1]
-    try:
-        path = path1 + "/out_disp.log"
-        outdisp.read(path,key)
-        if outdisp.dic["converged"]:
-            path = path1+"/out_equiv.log"
-            outdisp.read(path,key)
-            if outdisp.dic["converged"]:
-                path = path1+"/out_jij.log"
-                outjij.read(path,key)
-                #print(outjij)
-                return outjij.__str__(",")
-    except:
-        pass
-    return key
-
-def test_permally():
-
-    path0 = "/home/kino/kino/work/fukushima_HEA/result/result.permalloy/*/result/*"
-    dirs = glob.glob(path0)
-
-    for path1 in dirs:
-        s = extract_shortresult(path1)
-        print(s)
-
-def test_4element():
-
-    path0 = "/home/kino/kino/work/fukushima_HEA/result/result_4elements/[0-9]???????"
-    dirs = glob.glob(path0)
-
-    nmax = len(dirs)
-    p = progressbar.ProgressBar(0,nmax, widgets=[
-            progressbar.CurrentTime(), ':',
-            '(', progressbar.Counter(), ' of {}) '.format(nmax),
-             progressbar.Bar(), ' ', progressbar.ETA(), ])
-
-    f = open("result_4element.csv","w")
-    for i,path1 in enumerate(dirs):
-        p.update(i+1)
-        s = extract_shortresult(path1)
-        f.write(s+"\n")
-
-
-
 
 
 # coding: utf-8
 
 # In[ ]:
-
-import numpy as np
-import matplotlib.pyplot as plt
-import glob
-import os
-import pickle
-#get_ipython().magic('matplotlib inline')
-from pymatgen import Element
-
 
 # In[ ]:
 
@@ -583,7 +244,7 @@ class OutputDOS:
         self.ewidth,_ = self.get_value(key="ewidth=",astype=float)
         self.magtyp,_ = self.get_value(key="magtyp=")
         self.ncmpx,_ = self.get_value(key="ncmpx=",astype=int)
-        #print("self.ncmpx",self.ncmpx)
+        self.dic = { "ewidth":self.ewidth, "magtyp":self.magtyp, "ncmpx":self.ncmpx }
 
         self.cut_atomiclevel()
         if target=="firstDOS":
@@ -600,6 +261,7 @@ class OutputDOS:
             else:
                 nspin = 1
             self.nspin = nspin
+            self.dic["nspin"] = nspin
 
             #print("ncmpx",self.ncmpx)
             istart=0
@@ -619,27 +281,63 @@ class OutputDOS:
                     dos,istart = self.cut_dos(key = " DOS of component", start=istart)
                     componentdos.append(dos)
                 componentdos = np.array(componentdos)
+                mse = componentdos.shape[1]
                 self.componentdos.append(componentdos)
 
                 dos,istart = self.cut_dos(key = " total DOS", start=istart)
                 self.totaldos.append(dos)
 
-                dos,istart = self.cut_dos(key = " integrated DOS", start=istart)
+                dos,istart = self.cut_dos(key = " integrated DOS", start=istart,mse=mse)
                 self.integrateddos.append(dos)
 
+        self.dic["componentdos"] = self.componentdos
+        self.dic["totaldos"] = self.totaldos
+        self.dic["integrateddos"] = self.integrateddos
 
-#    def get_value(self,key="ewidth=",astype=str):
-#        lines = self.lines
-#        for x in lines:
-#            x = x.replace("=","= ")
-#            s = x.split(" ")
-#            if key in s:
-#                s = del_null(s)
-#                for i in range(len(s)):
-#                    if s[i]==key:
-#                        value = s[i+1]
-#                        return astype(value)
-#        return None
+    def get(self,key,spinsum=True):
+        if spinsum:
+            v0 = self.dic[key][0]
+            v1 = self.dic[key][1]
+            return v0+v1
+        else:
+            return self.dic[key]
+
+    def plot(self,key,spinsum=True):
+        if key=="totaldos":
+            dos = self.get(key,spinsum)
+
+            figsize = (10,1.5*2)
+            fig,ax = plt.subplots(  2,1, figsize=figsize)
+            ax[0].plot(dos[:,0],dos[:,1])
+            ax[0].set_xlabel("E")
+            ax[0].set_ylabel("DOS")
+            ax[1].plot(dos[:,0],np.log(dos[:,1]))
+            ax[1].set_xlabel("E")
+            ax[1].set_ylabel("log10(DOS)")
+            plt.tight_layout()
+            plt.show()
+        elif key=="componentdos":
+            dos = self.get(key,spinsum)
+            ncmpx = self.dic["ncmpx"]
+            figsize = (10,1.5*ncmpx)
+            lmx = dos.shape[2]
+            emin = dos[:,:,0].ravel().min()
+            emax = dos[:,:,0].ravel().max()
+            fig,ax = plt.subplots(  ncmpx,1, figsize=figsize)
+            for icmpx,z in enumerate(self.dic["zlist"]):
+                elem = Element("H").from_Z(z)
+                for ilm in range(1,lmx):
+                    ax[icmpx].plot(dos[icmpx,:,0],np.log10(dos[icmpx,:,ilm]),label=str(ilm-1))
+                ax[icmpx].set_title("Z={} {}".format(z,str(elem)))
+                ax[icmpx].legend()
+                ax[icmpx].set_xlim( (emin,emax) )
+                ax[icmpx].set_xlabel( "E" )
+                ax[icmpx].set_ylabel( "log10(DOS)" )
+            plt.tight_layout()
+
+            plt.show()
+
+
     def get_value(self,key="ewidth=",astype=str,start=0):
         lines = self.lines
         #for x in lines:
@@ -689,6 +387,7 @@ class OutputDOS:
             if len(config)>0:
                 zconfig.append(config)
         self.zlist , self.zconfig =  zlist,zconfig
+        self.dic.update({"zlist":zlist,"zconfig":zconfig})
 
 
     def print_valencelevels(self,ewidth=-1.0):
@@ -699,55 +398,67 @@ class OutputDOS:
                     print(z,config)
 
 
-    def cut_dos(self,key = " total DOS", start=0, normalize=False):
+    def cut_dos(self,key = " total DOS", start=0, mse=None, normalize=False):
         istart = start
         lines = self.lines
-        
-        started = False
-        done = False
-        totaldos= []
-        #for x in lines:
-        for iline in range(istart,len(lines)):
-            x = lines[iline]
-            if started and len(x)==0:
-                done = True
-            if started and x.startswith(" ***err"):
-                done = True
-            if started and x.startswith(" eb="):
-                done = True
-            if started and x.startswith("   itr="):
-                done = True
-            if started and x.startswith(" **itr="):
-                done = True
-            if started and x.startswith("  *itr="):
-                done = True
-            if started and x.startswith(" * itr="):
-                done = True
-            if started and x.startswith("***itr="):
-                done = True
-            if started and x.startswith("   ***msg"):
-                done = True
+        totaldos= []        
+        if mse is not None:
 
+            for ia,line in enumerate(self.lines[start:]):
+                if line.startswith(key):
+                    start += ia+1
+                    break
 
+            for ia,x in enumerate(self.lines[start:]):
+                if ia==mse:
+                    break
 
+                vm =  list(map(float,x.split()))
+                totaldos.append( vm ) 
+            iline = start+mse
 
+        else:
+            started = False
+            done = False
 
-            if started and done:
-                break
- 
-            if started and not done:
-                try:
-                    vm =  list(map(float,x.split()))
-                    totaldos.append( vm )
-                except:
-                    print("warning: conversion to float failed. drop the line.")
-                    print(x)
-                    vm = [x.split()[0],0,0,0]
-                    vm = list(map(float,vm)) 
-                    totaldos.append( vm )
+            #for x in lines:
+            for iline in range(istart,len(lines)):
+                x = lines[iline]
+                if started and len(x)==0:
+                    done = True
+                if started and x.startswith(" ***err"):
+                    done = True
+                if started and x.startswith(" eb="):
+                    done = True
+                if started and x.startswith("   itr="):
+                    done = True
+                if started and x.startswith(" **itr="):
+                    done = True
+                if started and x.startswith("  *itr="):
+                    done = True
+                if started and x.startswith(" * itr="):
+                    done = True
+                if started and x.startswith("***itr="):
+                    done = True
+                if started and x.startswith("   ***msg"):
+                    done = True
 
-            if x.startswith(key):
-                started = True
+                if started and done:
+                    break
+
+                if started and not done:
+                    try:
+                        vm =  list(map(float,x.split()))
+                        totaldos.append( vm )
+                    except:
+                        print("warning: conversion to float failed. drop the line.")
+                        print(x)
+                        vm = [x.split()[0],0,0,0]
+                        vm = list(map(float,vm)) 
+                        totaldos.append( vm )
+
+                if x.startswith(key):
+                    started = True
                 
         totaldos = np.array(totaldos)
         if normalize and totaldos.shape[0]>0:
@@ -800,37 +511,112 @@ def type2_name_z(s):
     
 class OutputGo:
     
-    def __init__(self,filename="out.log"):
+    def __init__(self,filename="out.log",heakey=None,action=["default"]):
+
         self.lines = read_file(filename = filename)    
+        self.dic = {}
+        self.dic["heakey"] = heakey        
         
+        self.dic["go"],_ = self.get_value(" go=")
+        self.dic["file"],_ = self.get_value("file=")
+        self.dic["edelt"],_ = self.get_value("edelt=",astype=float)        
         self.ewidth,_ = self.get_value(key="ewidth=",astype=float)
         self.magtyp,_ = self.get_value(key="magtyp=")
         if self.magtyp == "mag":
             self.nspin = 2
         else:
             self.nspin = 1
+        self.dic["record"],_ = self.get_value(key="record=")
+        self.dic["outtyp"],_ = self.get_value(key="outtyp=")
+        self.dic["bzqlty"],_ = self.get_value(key="bzqlty=",astype=int)
+        self.dic["maxitr"],_ = self.get_value(key="maxitr=",astype=int)
+        self.dic["pmix"],_ = self.get_value(key="pmix=",astype=float)
             
-        self.cut_atomiclevel()
+        self.dic["ewidth"] = self.ewidth
+        self.dic["magtyp"] = self.magtyp
+        self.dic["nspin"] = self.nspin
+        
+        if "energylevels" in action:
+            self.cut_atomiclevel()
 
         self.ncmpx,_= self.get_value(key="ncmpx=",astype=int)
-
+        self.dic["ncmpx"] = self.ncmpx
+        
+        _,start = self.get_value(key="lattice constant")
+        self.dic["alen"] ,_= self.get_value(key="a=",astype=float,start=start)
+        if True:
+            vol,_ = self.get_value(key="unit cell volume=")
+            s = vol.replace("("," ").strip().split()
+            self.dic["vol"] = float(s[0] )
+        
+        
         istart = 0
         self.zlist = []
+        self.conclist = []
         for i in range(self.ncmpx):
-              x,istart = self.get_value(key="anclr=",astype=float,start=istart)
-              istart += 1
-              self.zlist.append(x)
-        #print("zlist",self.zlist)
-
-        self.totalenergy,start = self.get_value(key="energy=",astype=float)
-        self.finalcoreconf = []
-        self.finalcorez = []
-        for i in range(self.ncmpx):
-            z, finalcoreconfig, start = self.get_finalcorelevel(start)
-            #print(z,finalcoreconfig)
-            self.finalcoreconf.append(finalcoreconfig)
-            self.finalcorez.append(z)
+            x,istart = self.get_value(key="anclr=",astype=float,start=istart)
+            conc, istart = self.get_value(key="conc=",astype=float,start=istart)
+            istart += 1
+            self.zlist.append(x)
+            self.conclist.append(conc)
+        self.dic["zlist"] = self.zlist
+        self.dic["anclr"] = self.zlist
+        self.dic["conc"] = self.conclist
+        
+        if "energylevels" in action:
+            self.finalcoreconf = []
+            self.finalcorez = []
+            for i in range(self.ncmpx):
+                z, finalcoreconfig, start = self.get_finalcorelevel(start)
+                #print(z,finalcoreconfig)
+                self.finalcoreconf.append(finalcoreconfig)
+                self.finalcorez.append(z)
+            self.dic["finalcoreconf"] = self.finalcoreconf
+            self.dic["finalcorez"] = self.finalcorez
             
+        self.dic["totalmoment"],_ = self.get_value(key="spin moment=",astype=float)
+        
+        
+        self.totalenergy,start = self.get_value(key="total energy=",astype=float)
+        self.dic["totalenergy"] = self.totalenergy
+        moment_comp = []
+        for icmpx in range(self.dic["ncmpx"]):
+            x,start = self.get_value(key="spin moment=",astype=float)
+            moment_comp.append(x)
+        self.dic["moment"] = moment_comp
+        
+        h_moment = []
+        h_te = []
+        h_err = []
+        _,start = self.get_value("   ***** self-consistent")
+        for line in self.lines[start+1:]:
+            if line.startswith("   itr="):
+                if line.find("chr,spn")>=0:
+                    break
+                x = self.get_value_fromline(line,"moment=",astype=float)
+                h_moment.append(x)
+                x = self.get_value_fromline(line,"te=",astype=float)
+                h_te.append(x)
+                x = self.get_value_fromline(line,"err=",astype=float)
+                h_err.append(x)
+            if line.startswith("   total energy="):
+                break
+        if "history" in action:
+
+            self.dic["h_err"] = h_err
+            self.dic["h_moment"] = h_moment
+            self.dic["h_te"] = h_te
+        else:
+            self.dic["h_err"] = h_err[-1:]
+            self.dic["h_moment"] = h_moment[-1:]
+            self.dic["h_te"] = h_te[-1:] 
+
+        if self.dic["h_err"][-1]<-6.:
+            self.dic["converged"] = True
+        else:
+            self.dic["converged"] = False
+        
+                
     def get_finalcorelevel(self,start=0):
         lines = self.lines
         key = "                             *** type"
@@ -874,19 +660,38 @@ class OutputGo:
         
     def get_value(self,key="ewidth=",astype=str,start=0):
         lines = self.lines
-        #for x in lines:
-        for iline in range(start,len(lines)):
-            x = lines[iline]
-            x = x.replace("=","= ")
-            s = x.split(" ")
-            if key in s:
-                s = del_null(s)
-                for i in range(len(s)):
-                    if s[i]==key:
-                        value = s[i+1]
-                        return astype(value),iline
+        #for x in line:
+        #for iline in range(start,len(lines)):
+        for ia,x in enumerate(lines[start:]) :
+            #x = lines[iline]
+            ipos = x.find(key)
+            if ipos>=0:
+                x = x[ipos+len(key):]
+                x = x.strip()
+                s = x.split(" ")
+                value = s[0]
+                try:
+                    return astype(value),start+ia
+                except:
+                    return None,start+ia
         return None,0
+    
+    def get_value_fromline(self,line,key="ewidth=",astype=str,start=0):
 
+        x = line
+        ipos = x.find(key)
+        if ipos>=0:
+            x = x[ipos+len(key):]
+            x = x.strip()
+            s = x.split(" ")
+            value = s[0]
+
+            try:
+                return astype(value)
+            except:
+                return np.nan
+        return None
+    
     def cut_atomiclevel(self,key = '   nuclear charge=',key2 = '         nl      cnf         energy' ):
         lines = self.lines
         
@@ -922,7 +727,7 @@ class OutputGo:
                 zconfig.append(config)
         #self.zlist , self.zconfig =  zlist,zconfig
         self.zconfig =  zconfig
-
+        self.dic["zconfig"] = zconfig
 
     def print_valencelevels(self,ewidth=-1.0):
         zlist , zconfig = self.zlist, self.zconfig
@@ -935,16 +740,16 @@ class OutputGo:
 
 if __name__ == "__main__":
 
-    #test_dispDB()
-    #sys.exit(0)
+    #outgo = OutputGo("/home/kino/kino/work/fukushima_HEA/set3/err_sample/fcc_13143183_002/out_go.log",
+    #                 "11223344",action=["default"])
+    #print(outgo.dic)
+    
+    outdos = OutputDOS("/home/kino/kino/work/fukushima_HEA/set3/run110/bcc_25497683_3/out_dos.log")
+    #outj = OutputJ("/home/kino/kino/work/fukushima_HEA/set3/run110/bcc_25497683_3/out_j.log")
 
-    #test_EqosDB()
-    #sys.exit(0)
-    #test_eqos_figure()
-    #sys.exit(0)
+    #print(outgo.dic)
+    #print(outdos.dic.keys())
+    #print(outj.dic)
 
-    #path0 = "/home/kino/kino/work/fukushima_HEA/result/result_4elements/{}/out_disp.log".format(key)
-
-    #test_permally()
-    test_4element()
+    outdos.plot("componentdos")
 
