@@ -15,6 +15,34 @@ import pandas as pd
 
 from pymatgen import Element
 
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from sklearn.preprocessing import StandardScaler
+
+
+
+def linearregressionscore(y):
+    #print(len(y))
+    y0 = np.array(y).reshape(-1,1)
+    #x0 = np.array([i for i in range(len(y))]).reshape(-1,1)
+    x0 = np.arange( len(y0) ).astype(float).reshape(-1,1)
+    #print("x0,y0",x0,y0)
+    scalerx = StandardScaler()
+    scalerx.fit(x0)
+    x = scalerx.transform(x0)
+    
+    scalery = StandardScaler()
+    scalery.fit(y0)
+    y = scalery.transform(y0)
+    #print("x,y",x,y)
+    
+    reg = LinearRegression().fit(x,y)
+    yp = reg.predict(x)
+    r2score = r2_score(y,yp)
+    return r2score
+
+
+
 class OutputJ: 
     def __init__(self,outputfile):
         self.dic = {}
@@ -295,12 +323,17 @@ class OutputDOS:
         self.dic["integrateddos"] = self.integrateddos
 
     def get(self,key,spinsum=True):
+        """
+        averageを返す
+        """
+
         if spinsum:
             v0 = self.dic[key][0]
             v1 = self.dic[key][1]
-            return v0+v1
+            vsum = (v0+v1)*0.5
+            return vsum
         else:
-            return self.dic[key]
+            return self.dic[key][0]
 
     def plot(self,key,spinsum=True):
         if key=="totaldos":
@@ -308,10 +341,10 @@ class OutputDOS:
 
             figsize = (10,1.5*2)
             fig,ax = plt.subplots(  2,1, figsize=figsize)
-            ax[0].plot(dos[:,0],dos[:,1])
+            ax[0].plot(dos[:,0],dos[:,1]*2.0)
             ax[0].set_xlabel("E")
             ax[0].set_ylabel("DOS")
-            ax[1].plot(dos[:,0],np.log(dos[:,1]))
+            ax[1].plot(dos[:,0],np.log(dos[:,1]*2.0))
             ax[1].set_xlabel("E")
             ax[1].set_ylabel("log10(DOS)")
             plt.tight_layout()
@@ -327,7 +360,7 @@ class OutputDOS:
             for icmpx,z in enumerate(self.dic["zlist"]):
                 elem = Element("H").from_Z(z)
                 for ilm in range(1,lmx):
-                    ax[icmpx].plot(dos[icmpx,:,0],np.log10(dos[icmpx,:,ilm]),label=str(ilm-1))
+                    ax[icmpx].plot(dos[icmpx,:,0],np.log10(dos[icmpx,:,ilm]*2.0),label=str(ilm-1))
                 ax[icmpx].set_title("Z={} {}".format(z,str(elem)))
                 ax[icmpx].legend()
                 ax[icmpx].set_xlim( (emin,emax) )
@@ -514,6 +547,7 @@ class OutputGo:
     def __init__(self,filename="out.log",heakey=None,action=["default"]):
 
         self.lines = read_file(filename = filename)    
+        self.action = action
         self.dic = {}
         self.dic["heakey"] = heakey        
         
@@ -611,11 +645,25 @@ class OutputGo:
             self.dic["h_moment"] = h_moment[-1:]
             self.dic["h_te"] = h_te[-1:] 
 
-        if self.dic["h_err"][-1]<-6.:
+        if self.dic["h_err"][-1]<=-6.:
             self.dic["converged"] = True
         else:
             self.dic["converged"] = False
         
+    def plot(self,plotkind="all"):
+        if "history" in self.action:
+            figsize=(10,3)
+            fig,ax = plt.subplots(  2,1, figsize=figsize)
+            h_err = self.dic["h_err"]
+            h_moment = self.dic["h_moment"]
+            ax[0].set_xlabel("iteration")
+            ax[0].set_ylabel("h_err")
+            ax[0].plot(range(len(h_err)), h_err)
+            ax[1].set_xlabel("iteration")
+            ax[1].set_ylabel("h_moment")
+            ax[1].plot(range(len(h_moment)), h_moment)
+            plt.tight_layout()
+            plt.show()
                 
     def get_finalcorelevel(self,start=0):
         lines = self.lines
@@ -736,6 +784,19 @@ class OutputGo:
                 if config[2]>ewidth:
                     print(z,config)
 
+
+    def converging(self):
+        last = 100
+        dic = self.dic  
+        r2moment = linearregressionscore( dic["h_moment"][-last:] )
+        r2err = linearregressionscore(  dic["h_err"][-last:] )
+        #print( "use the last {}, r2moment={:6.2f} r2err={:6.2f}".format(last,r2moment, r2err) )
+        if r2err>0.80:
+            return True
+        elif r2moment > 0.80 and r2err>0.80:
+            return True
+        else:
+            return False
 
 
 if __name__ == "__main__":
