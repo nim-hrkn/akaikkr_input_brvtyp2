@@ -43,10 +43,13 @@ def headirname2prop(dir_):
     return dic
 
 class HEAPathSearch:
-    def __init__(self,prefix,dic):
+    def __init__(self,prefix,dic,ordertype=2):
         self.prefix = copy.deepcopy(prefix)
         self.dirkeys_default = collections.OrderedDict()
-        self.dirkeys_default.update({"key":"*","ew":"*","polytyp":"*","ed":"*","pm":"*"})
+        if ordertype==1:
+            self.dirkeys_default.update({"key":"*","ew":"*","polytyp":"*","ed":"*","pm":"*"})
+        elif ordertype==2:
+            self.dirkeys_default.update({"key":"*","ew":"*","ed":"*","polytyp":"*","pm":"*"})
         
         self.dirkeys = copy.deepcopy(self.dirkeys_default)
         self.dirkeys.update(dic)

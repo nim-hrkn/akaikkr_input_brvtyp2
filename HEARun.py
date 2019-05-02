@@ -21,6 +21,7 @@ from itertools import combinations
 import pandas as pd
 import glob
 from IPython.display import display
+import shutil
 
 os.environ["MKL_NUM_THREADS"]="1"
 
@@ -35,6 +36,23 @@ class analyzeDOS:
         """
         self.dossumlist = dossumlist
         self.dosth = dosth
+
+        # check tne energy range of the DOS is the same
+        eminlist = []
+        emaxlist = []
+        for dossum in dossumlist:
+            #print("dossum",dossum[:5,:])
+            eminlist.append(dossum[0,0])
+            emaxlist.append(dossum[-1,0])
+        eminlist = np.array(eminlist)
+        emaxlist = np.array(emaxlist)
+        if (eminlist != eminlist[0]).any():
+            print("energy range different, for min")
+            raise
+        if (emaxlist != emaxlist[0]).any():
+            print("energy range different, for max")
+            raise
+        print("emin,emax",eminlist[0],emaxlist[0])
         
         smalldosregion = []
         for dossum in dossumlist:
@@ -51,6 +69,9 @@ class analyzeDOS:
         # =1 if both smalldos is 1
         smalldosregionsum = smalldosregionsum//len(dossumlist) # This is the same as AND operation
         #print(smalldosregionsum)
+
+        #for ie,(ene,val) in enumerate(zip(dossumlist[0][:,0],smalldosregionsum)):
+        #    print(ie,ene,val)
     
         # [01] list -> region list
         start = False
@@ -68,7 +89,7 @@ class analyzeDOS:
             smallregion.append([istart,len(smalldos)])
         #print(smallregion)
 
-        dossum = dossumlist[0]
+        dossum = dossumlist[0] # use only energy
         print("gap region")
         print(dossum[smallregion,0])
         self.smallregion = smallregion
@@ -143,9 +164,10 @@ class HEArun:
         if "ewidth_dos" in self.dic.keys():
             self.ewidth_dos = self.dic["ewidth_dos"]
         else:
-            self.ewidth_dos = ewidth + 0.3 
+            #self.ewidth_dos = ewidth + 1.0
+            self.ewidth_dos = 3.0
+            # default energy range -> [-ewidth*0.75: ewith*0.25]
 
-        #print("init, dic",self.dic )
         
     def make_heainput(self,heakey,go="go",brvtyp="bcc",ewidth=1.7):
         """
@@ -156,6 +178,7 @@ class HEArun:
         dic = self.dic
         dic.update( {"go":go,"a":0,"brvtyp":brvtyp, "ewidth":ewidth } )
         if go=="go":
+            dic.update({"record":"2nd"} )
             inp = KKRinput_brv(dic)
         elif go=="dos":
             dic.update({"record":"2nd"} )
@@ -193,7 +216,7 @@ class HEArun:
         make GO input and run it
         
         """
-        print(os.getcwd())
+        #print(os.getcwd())
         heakey = self.heakey
         polytyp = self.polytyp
         ewidth = self.ewidth
@@ -210,7 +233,7 @@ class HEArun:
 
         outputname = self.dic["out_go_log"]
         p = os.path.join(prefix,outputname)
-        print(p,"exists?",os.path.exists(p))
+        #print(p,"exists?",os.path.exists(p))
         if not os.path.exists(p):
             cmd = "cd {}; {} < {} > {}".format(prefix,specx,inputname,outputname)
             subprocess.call(cmd,shell=True)
@@ -220,7 +243,7 @@ class HEArun:
         make DOS input and run it
         
         """
-        print(os.getcwd())
+        #print(os.getcwd())
         
         heakey = self.heakey
         polytyp = self.polytyp
@@ -237,7 +260,7 @@ class HEArun:
 
         outputname = self.dic["out_dos_log"]
         p = os.path.join(prefix,outputname)
-        print(p,"exists?",os.path.exists(p))
+        #print(p,"exists?",os.path.exists(p))
 
         if not os.path.exists(p) or force:
             cmd = "cd {}; {} < {} > {}".format(prefix,specx,inputname,outputname)
@@ -247,7 +270,7 @@ class HEArun:
         """
         make J input and run it
         """
-        print(os.getcwd())
+        #print(os.getcwd())
         
         heakey = self.heakey
         polytyp = self.polytyp
@@ -264,13 +287,13 @@ class HEArun:
 
         outputname = self.dic["out_j_log"]
         p = os.path.join(prefix,outputname)
-        print(p,"exists?",os.path.exists(p))
+        #print(p,"exists?",os.path.exists(p))
 
         if not os.path.exists(p):
             cmd = "cd {}; {} < {} > {}".format(prefix,specx,inputname,outputname)
             subprocess.call(cmd,shell=True)        
 
-    def run_all(self, prefix, stopifnotconverged = False):
+    def run_all(self, prefix, copyfiles_from = None, stopifnotconverged = False):
         """
         run GO, DOS and J
         """
@@ -279,10 +302,14 @@ class HEArun:
         if not os.path.exists(p):
             os.mkdir(p)
             print(p,"is made.")
+
+        if copyfiles_from is not None:
+            print("copy {} from {}".format(self.dic["file"], copyfiles_from,) )
+            shutil.copy2( os.path.join( copyfiles_from, self.dic["file"]) , os.path.join(p, self.dic["file"]))
             
+        heakey = self.heakey
         self.make_GOinput_and_run(prefix)
-        out = OutDisp()
-        out.read(os.path.join(prefix,self.dic["out_go_log"]),heakey)
+        out = OutputGo(os.path.join(prefix,self.dic["out_go_log"]),heakey)
         print("CONVERGED?",out.dic["converged"])
         self.converged = out.dic["converged"]
         if stopifnotconverged :
@@ -293,7 +320,7 @@ class HEArun:
             self.make_DOSinput_and_run(prefix)
             self.make_Jinput_and_run(prefix)            
 
-
+        return self.converged
 
 # In[106]:
 

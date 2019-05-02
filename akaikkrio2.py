@@ -21,7 +21,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 
-def linearregressionscore(y):
+def linearregressionscore(y,plot=False):
     #print(len(y))
     y0 = np.array(y).reshape(-1,1)
     #x0 = np.array([i for i in range(len(y))]).reshape(-1,1)
@@ -34,11 +34,19 @@ def linearregressionscore(y):
     scalery = StandardScaler()
     scalery.fit(y0)
     y = scalery.transform(y0)
-    #print("x,y",x,y)
     
     reg = LinearRegression().fit(x,y)
     yp = reg.predict(x)
-    r2score = r2_score(y,yp)
+    #print( y.ravel(),yp.ravel())
+
+    if plot:
+        plt.figure(figsize=(5,5))
+        plt.plot( y.ravel(),yp.ravel())
+        plt.xlabel("normalized raw")
+        plt.ylabel("normalized predict")
+        plt.show()
+
+    r2score = r2_score(y.ravel(),yp.ravel())
     return r2score
 
 
@@ -790,7 +798,7 @@ class OutputGo:
         dic = self.dic  
         r2moment = linearregressionscore( dic["h_moment"][-last:] )
         r2err = linearregressionscore(  dic["h_err"][-last:] )
-        #print( "use the last {}, r2moment={:6.2f} r2err={:6.2f}".format(last,r2moment, r2err) )
+        print( "use the last {}, r2moment={:6.2f} r2err={:6.2f}".format(last,r2moment, r2err) )
         if r2err>0.80:
             return True
         elif r2moment > 0.80 and r2err>0.80:
