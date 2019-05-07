@@ -62,6 +62,10 @@ class OutputJ:
         """
         debug_ = False
         outputlist = open(outputfile).readlines()
+        if not self.exit_normally(outputlist):
+            print("program not exitted normally")
+            return None
+
         moment_comp=[]
         for output in outputlist:
                 if 'total energy' in output:
@@ -113,6 +117,13 @@ class OutputJ:
             v = list( map(str,v) )
             s = ",".join(v)
         return s
+
+    def exit_normally(self,lines):
+        for x in lines[-20:]:
+            if x.startswith(" sbtime report"):
+                return True
+        return False
+
 
 
 class OutDisp:
@@ -272,10 +283,25 @@ def del_null(s):
             s2.append(x)
     return s2
 
+
+class OutputCommon:
+    def __init__(self,filename="out.log",target="lastDOS"):
+        self.lines = read_file(filename = filename)    
+        self.normal_exit = self.exit_normally()
+
+    def exit_normally(self):
+        for x in self.lines[-20:]:
+            if x.startswith(" sbtime report"):
+                return True
+        return False
+
 class OutputDOS:
     
     def __init__(self,filename="out.log",target="lastDOS"):
         self.lines = read_file(filename = filename)    
+        self.normal_exit = self.exit_normally()
+        if not self.normal_exit:
+            return 
         
         self.ewidth,_ = self.get_value(key="ewidth=",astype=float)
         self.magtyp,_ = self.get_value(key="magtyp=")
@@ -329,6 +355,12 @@ class OutputDOS:
         self.dic["componentdos"] = self.componentdos
         self.dic["totaldos"] = self.totaldos
         self.dic["integrateddos"] = self.integrateddos
+
+    def exit_normally(self):
+        for x in self.lines[-20:]:
+            if x.startswith(" sbtime report"):
+                return True
+        return False
 
     def get(self,key,spinsum=True):
         """
@@ -555,6 +587,10 @@ class OutputGo:
     def __init__(self,filename="out.log",heakey=None,action=["default"]):
 
         self.lines = read_file(filename = filename)    
+        self.normal_exit = self.exit_normally()
+        if not self.normal_exit: 
+            return 
+
         self.action = action
         self.dic = {}
         self.dic["heakey"] = heakey        
@@ -672,7 +708,14 @@ class OutputGo:
             ax[1].plot(range(len(h_moment)), h_moment)
             plt.tight_layout()
             plt.show()
-                
+
+    def exit_normally(self):
+        for x in self.lines[-20:]:
+            if x.startswith(" sbtime report"):
+                return True
+        return False
+
+               
     def get_finalcorelevel(self,start=0):
         lines = self.lines
         key = "                             *** type"

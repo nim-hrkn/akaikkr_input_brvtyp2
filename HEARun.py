@@ -10,7 +10,7 @@ p = "/home/kino/kino/work/fukushima_HEA/akaikkr_input_brvtyp2"
 sys.path.append(p)
 from kkrinput_brvtyp import KKRinput_brv
 from hea_util import *
-from akaikkrio2 import OutputDOS, OutputGo, OutputJ
+from akaikkrio2 import OutputDOS, OutputGo, OutputJ,OutputCommon
 
 import os
 import subprocess
@@ -133,6 +133,8 @@ class analyzeDOS:
                 newewidth_choice.append( newewidth )
         #print("possible choice",newewidth_choice)
         newewidth_choice = -np.array(newewidth_choice)
+        # newewidth_choice must be a list 
+        newewidth_choice = list(newewidth_choice)
         
         if canusethisewidth>=0:
             #newewidth = -ewidth
@@ -211,7 +213,7 @@ class HEArun:
             os.mkdir(p)
         os.chdir(p)
     
-    def make_GOinput_and_run(self,prefix):
+    def make_GOinput_and_run(self,prefix,force=False):
         """
         make GO input and run it
         
@@ -234,7 +236,16 @@ class HEArun:
         outputname = self.dic["out_go_log"]
         p = os.path.join(prefix,outputname)
         #print(p,"exists?",os.path.exists(p))
+        execute_it = False
         if not os.path.exists(p):
+            execute_it = True
+        if os.path.exists(p):
+            output = OutputCommon(p)
+            if not output.normal_exit:
+                print("exist {}, but not normal exit. Run it again") 
+                execute_it = True
+
+        if execute_it or force:
             cmd = "cd {}; {} < {} > {}".format(prefix,specx,inputname,outputname)
             subprocess.call(cmd,shell=True)
         
@@ -260,13 +271,21 @@ class HEArun:
 
         outputname = self.dic["out_dos_log"]
         p = os.path.join(prefix,outputname)
-        #print(p,"exists?",os.path.exists(p))
 
-        if not os.path.exists(p) or force:
+        execute_it = False
+        if not os.path.exists(p):
+            execute_it = True
+        if os.path.exists(p):
+            output = OutputCommon(p)
+            if not output.normal_exit:
+                print("exist {}, but not normal exit. Run it again") 
+                execute_it = True
+
+        if execute_it or force:
             cmd = "cd {}; {} < {} > {}".format(prefix,specx,inputname,outputname)
             subprocess.call(cmd,shell=True)
         
-    def make_Jinput_and_run(self,prefix):
+    def make_Jinput_and_run(self,prefix,force=False):
         """
         make J input and run it
         """
@@ -287,9 +306,17 @@ class HEArun:
 
         outputname = self.dic["out_j_log"]
         p = os.path.join(prefix,outputname)
-        #print(p,"exists?",os.path.exists(p))
 
+        execute_it = False
         if not os.path.exists(p):
+            execute_it = True
+        if os.path.exists(p):
+            output = OutputCommon(p)
+            if not output.normal_exit:
+                print("exist {}, but not normal exit. Run it again") 
+                execute_it = True
+
+        if execute_it or force:
             cmd = "cd {}; {} < {} > {}".format(prefix,specx,inputname,outputname)
             subprocess.call(cmd,shell=True)        
 
