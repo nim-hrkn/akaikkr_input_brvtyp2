@@ -140,7 +140,7 @@ class analyzeDOS:
             #newewidth = -ewidth
             return "old",ewidth,newewidth_choice,canusethisewidth
         else:
-            if newewidth_choice.shape[0]==0:
+            if len(newewidth_choice)==0:
                 return "fail",None,None,None
             else:
                 return "new",newewidth_choice[0],newewidth_choice,0

@@ -16,12 +16,12 @@ import pandas as pd
 from pymatgen import Element
 
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_absolute_error
 from sklearn.preprocessing import StandardScaler
 
 
 
-def linearregressionscore(y,plot=False):
+def linearregressionscore(y,plot=False,score="r2"):
     #print(len(y))
     y0 = np.array(y).reshape(-1,1)
     #x0 = np.array([i for i in range(len(y))]).reshape(-1,1)
@@ -46,8 +46,16 @@ def linearregressionscore(y,plot=False):
         plt.ylabel("normalized predict")
         plt.show()
 
-    r2score = r2_score(y.ravel(),yp.ravel())
-    return r2score
+    if score=="r2":
+        score = r2_score(y.ravel(),yp.ravel())
+    elif score=="mae":
+        score = mean_absolute_error(scalery.inverse_transform(y).ravel(),
+                  scalery.inverse_transform(yp).ravel())
+    else:
+        print("unkown score",score,"use r2")
+        score = r2_score(y.ravel(),yp.ravel())
+
+    return score
 
 
 
@@ -841,13 +849,25 @@ class OutputGo:
         dic = self.dic  
         r2moment = linearregressionscore( dic["h_moment"][-last:] )
         r2err = linearregressionscore(  dic["h_err"][-last:] )
-        print( "use the last {}, r2moment={:6.2f} r2err={:6.2f}".format(last,r2moment, r2err) )
+        maemoment = linearregressionscore( dic["h_moment"][-last:], score="mae" )
+        maeerr = linearregressionscore(  dic["h_err"][-last:], score="mae" )
+
+        print( "use the last {}, r2moment={:6.2f} r2err={:6.2f} maemoment={:11.5e} maeerr={:11.5e}".format(last,r2moment,r2err, maemoment,maeerr) )
+
+        flag = False
+        # first check r2
         if r2err>0.80:
-            return True
+            flag = True
         elif r2moment > 0.80 and r2err>0.80:
-            return True
-        else:
-            return False
+            falg = True
+        if not flag:
+            # check MAE
+            if maeerr < 5e-4:
+                flag = True
+            elif maemoment < 5e-5 and maeerr < 5e-4 :
+                flag = True
+
+        return flag
 
 
 if __name__ == "__main__":
