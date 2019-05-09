@@ -864,7 +864,7 @@ class OutputGo:
             # check MAE
             if maeerr < 5e-4:
                 flag = True
-            elif maemoment < 5e-5 and maeerr < 5e-4 :
+            elif maemoment < 5e-5 and maeerr < 6e-3 :
                 flag = True
 
         return flag
